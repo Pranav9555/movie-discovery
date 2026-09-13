@@ -1,245 +1,495 @@
-# Movie Discovery App (MERN)
+# 🎬 Movie Discovery App
 
-A full-stack movie discovery platform. Browse trending, popular, top-rated and
-upcoming movies, search with debouncing, filter by genre/year, sort, paginate,
-open a details page, and keep a persistent wishlist stored in MongoDB.
+A full-stack movie discovery application that allows users to discover movies, search for titles, explore movie details, filter and sort results, and maintain a persistent wishlist.
+---
 
-**Stack:** React + Vite + JavaScript + Tailwind CSS + React Router + Axios ·
-Node.js + Express + Axios · MongoDB + Mongoose · TMDB API.
+## ✨ Features
+
+* Browse movies without searching
+* Trending, popular, top-rated, and upcoming movies
+* Search movies by title
+* Filter movies by genre and release year
+* Sort movies by popularity, rating, release date, and title
+* Pagination for large movie collections
+* Movie details page
+* Add/remove movies from wishlist
+* Wishlist persists after page refresh and browser restart
+* Responsive design for different screen sizes
+* Loading, empty, and error states
+* Backend API abstraction between frontend and TMDB
+* Server-side caching for repeated TMDB requests
+* API validation and error handling
+* TMDB rate-limit and timeout handling
 
 ---
 
-## 1. Quick start
+## 🛠️ Tech Stack
 
-### Prerequisites
+### Frontend
 
-- Node.js 18+
-- MongoDB running locally (`mongodb://127.0.0.1:27017`) or a MongoDB Atlas URI
-- A free TMDB API key: https://www.themoviedb.org/settings/api
+* React.js
+* Vite
+* JavaScript
+* Tailwind CSS
+* React Router
+* Axios
 
 ### Backend
 
+* Node.js
+* Express.js
+* Axios
+* REST API
+
+### Database
+
+* MongoDB
+* Mongoose
+
+### External API
+
+* TMDB (The Movie Database) API
+
+
+# 🚀 Setup Instructions
+
+## 1. Clone the repository
+
 ```bash
-cd server
-npm install
-cp .env.example .env      # then fill in TMDB_API_KEY and MONGO_URI
-npm run dev               # http://localhost:5000
+git clone <your-github-repository-url>
+cd movie-discovery-app
 ```
 
-### Frontend
+---
+
+## 2. Install frontend dependencies
 
 ```bash
 cd client
 npm install
-cp .env.example .env      # VITE_API_BASE_URL=http://localhost:5000/api
-npm run dev               # http://localhost:5173
 ```
-
-Open http://localhost:5173.
-
-Health check: http://localhost:5000/api/health
 
 ---
 
-## 2. Architecture
+## 3. Install backend dependencies
+
+Open another terminal:
+
+```bash
+cd server
+npm install
+```
+
+---
+
+## 4. Create environment variables
+
+Create a `.env` file inside the `server` directory.
+
+```env
+PORT=5000
+
+MONGODB_URI=your_mongodb_connection_string
+
+TMDB_API_KEY=your_tmdb_api_key
+TMDB_BASE_URL=https://api.themoviedb.org/3
+TMDB_IMAGE_BASE_URL=https://image.tmdb.org/t/p
+```
+
+Also in Client create .env 
+VITE_API_BASE_URL=http://localhost:5000/api
+
+
+---
+
+## 5. Start the backend
+
+From the `server` directory:
+
+```bash
+npm start
+```
+
+The backend will run on:
 
 ```text
-React Frontend (Vite)
-      |
-      |  HTTP / JSON  (axios)
-      v
+http://localhost:5000
+```
+
+Health check:
+
+```text
+http://localhost:5000/api/health
+```
+
+---
+
+## 6. Start the frontend
+
+From the `client` directory:
+
+```bash
+npm run dev
+```
+
+The frontend will normally be available at:
+
+```text
+http://localhost:5173
+```
+
+---
+
+# 🏗️ Approach Taken
+
+The application follows a **client-server architecture**.
+
+```text
+React Frontend
+      │
+      │ HTTP Requests
+      ▼
 Node.js + Express Backend
-      |
-      +-- Movie Service ----> TMDB API
-      |
-      +-- Wishlist Service --> MongoDB (Mongoose)
+      │
+      ├──────────────► TMDB API
+      │
+      └──────────────► MongoDB
 ```
 
-The React app **never** talks to TMDB directly. The TMDB API key lives only in
-`server/.env`. Every movie request goes through our own Express API, which
-calls TMDB, normalizes the response, and returns a consistent shape.
+The frontend does not communicate directly with TMDB.
 
-### Backend layering
+Instead, requests go through the backend:
 
 ```text
-route  ->  controller  ->  service  ->  (TMDB | MongoDB)
+React
+  ↓
+Express API
+  ↓
+Movie Service
+  ↓
+TMDB API
 ```
 
-- **routes/** — URL definitions only.
-- **controllers/** — read/validate the request, call a service, send a response.
-- **services/** — the actual work (HTTP calls to TMDB, Mongoose queries).
-- **models/** — Mongoose schemas.
-- **middleware/** — validation, rate limiting, 404, central error handler.
-- **utils/** — response normalization, tiny in-memory cache, ApiError class.
+Wishlist operations use:
 
----
-
-## 3. Data flow
-
-### Browsing the home page
-
-1. `Home` mounts and calls `getTrending()` in `client/src/services/movieApi.js`.
-2. Axios sends `GET /api/movies/trending?page=1` to Express.
-3. `movieRoutes` -> `movieController.getTrending` -> `tmdbService.fetchTrending`.
-4. The service checks the in-memory cache, otherwise calls TMDB.
-5. `normalizeMovieList` converts the TMDB payload into our own shape.
-6. The controller responds `{ success: true, data: { page, totalPages, results } }`.
-7. React stores it in state and renders `MovieGrid`.
-
-### Searching
-
-1. The user types. The input updates immediately (controlled state).
-2. `useDebounce` waits 500ms after the last keystroke.
-3. The debounced value is written into the URL: `/search?query=batman&page=1`.
-4. A `useEffect` watching the URL fires the request with an `AbortController`,
-   so an older in-flight request is cancelled when a newer one starts.
-5. Results replace the grid; previous results stay visible while loading.
-
-### Adding to the wishlist
-
-1. On first load the browser generates a UUID and stores it in `localStorage`
-   under `anonymousUserId`.
-2. Clicking the heart sends `POST /api/wishlist` with that id plus a small
-   movie snapshot.
-3. `wishlistService` writes to MongoDB. A compound unique index on
-   `anonymousUserId + movieId` prevents duplicates (returns `409`).
-
----
-
-## 4. API endpoints
-
-| Method | Endpoint | Description |
-| --- | --- | --- |
-| GET | `/api/health` | Service + database status |
-| GET | `/api/movies/trending?page=1` | Trending today |
-| GET | `/api/movies/popular?page=1` | Popular movies |
-| GET | `/api/movies/top-rated?page=1` | Top rated |
-| GET | `/api/movies/upcoming?page=1` | Upcoming |
-| GET | `/api/movies/genres` | Genre list (for the filter bar) |
-| GET | `/api/movies/search?query=batman&page=1` | Search |
-| GET | `/api/movies/discover?genre=28&year=2025&sort=rating&page=1` | Filter + sort |
-| GET | `/api/movies/:id` | Movie details |
-| GET | `/api/wishlist?anonymousUserId=...` | Saved movies |
-| POST | `/api/wishlist` | Add a movie |
-| DELETE | `/api/wishlist/:movieId?anonymousUserId=...` | Remove a movie |
-
-Every response uses the same envelope:
-
-```json
-{ "success": true, "data": { } }
-{ "success": false, "message": "Movie not found" }
+```text
+React
+  ↓
+Express API
+  ↓
+Wishlist Service
+  ↓
+MongoDB
 ```
 
-Status codes: `200` ok, `201` created, `400` invalid request, `404` not found,
-`409` duplicate, `429` rate limited, `502` TMDB upstream failure, `500` unknown.
+This keeps the external API key secure and gives the backend control over validation, normalization, caching, error handling, and rate limiting.
 
 ---
 
-## 5. Database schema
+# 🔌 API Design
 
-Collection: `wishlists`
+The backend exposes REST endpoints for the frontend.
 
-| Field | Type | Notes |
-| --- | --- | --- |
-| `anonymousUserId` | String | UUID from the browser, required, indexed |
-| `movieId` | Number | TMDB movie id, required |
-| `title` | String | Snapshot |
-| `posterUrl` | String | Full image URL or `null` |
-| `rating` | Number | Snapshot |
-| `releaseDate` | String | `YYYY-MM-DD` or `null` |
-| `savedAt` | Date | Defaults to now |
+### Movie endpoints
 
-Indexes:
+```text
+GET /api/movies/trending
+GET /api/movies/popular
+GET /api/movies/top-rated
+GET /api/movies/upcoming
+GET /api/movies/search
+GET /api/movies/discover
+GET /api/movies/:id
+GET /api/movies/genres
+```
 
-- `{ anonymousUserId: 1, movieId: 1 }` — **unique**, prevents duplicates.
-- `{ anonymousUserId: 1, savedAt: -1 }` — fast "my wishlist, newest first".
+### Wishlist endpoints
 
----
+```text
+GET    /api/wishlist
+POST   /api/wishlist
+DELETE /api/wishlist/:movieId
+```
 
-## 6. Technical decisions
+### Health endpoint
 
-**Why store a movie snapshot instead of only the id?**
-The wishlist page can render straight from MongoDB with one query. Without the
-snapshot we would need one TMDB request per saved movie on every page load.
-Tradeoff: if TMDB later changes a title or rating, the saved copy is slightly
-stale. Acceptable here, and the details page always shows live data.
-
-**Why an anonymous user id instead of login?**
-Authentication is out of scope for the assignment. A UUID in `localStorage`
-gives each browser its own wishlist with almost no code. Limitation: the
-wishlist is per-browser/per-device and is lost if site data is cleared.
-
-**Why a backend proxy at all?**
-It keeps the TMDB key secret, lets us normalize and validate data in one place,
-adds caching and rate limiting, and means the frontend has a single stable API.
-
-**Why plain React state + custom hooks?**
-The app has little shared state (only the wishlist, which uses React Context).
-Redux would add ceremony without benefit.
-
-**Why the URL as the source of truth for search?**
-`/search?query=batman&page=2&genre=28` makes results shareable, makes the back
-button work, and preserves search context when returning from a details page.
+```text
+GET /api/health
+```
 
 ---
 
-## 7. Caching
+# 🧠 Important Technical Decisions
 
-`server/src/utils/cache.js` is a tiny in-memory `Map` with a TTL (default 5
-minutes, configurable via `CACHE_TTL_SECONDS`). Every TMDB GET is keyed by its
-full path + query. This cuts repeat TMDB calls for popular endpoints and keeps
-the app inside TMDB rate limits. It is per-process and clears on restart —
-Redis would be the next step in production.
+## 1. Backend abstraction for TMDB
 
-## 8. Error handling
+The frontend never calls TMDB directly.
 
-- TMDB failures are caught in the service and re-thrown as an `ApiError` with a
-  readable message; the client never sees a raw axios stack.
-- All controllers are wrapped in `asyncHandler`, so rejected promises reach the
-  central `errorHandler` middleware.
-- Mongoose duplicate-key errors (`code 11000`) are translated into `409`.
-- Invalid ids / missing query params are rejected with `400` before any I/O.
-- The frontend shows an inline error card with a Retry button, and distinguishes
-  loading / empty / error states everywhere.
+All movie requests are handled by the Express backend.
 
-## 9. Performance
+This provides:
 
-- Debounced search (500ms) plus `AbortController` cancellation of stale requests.
-- Server-side caching of TMDB responses.
-- Lazy-loaded poster images with fixed aspect ratios (no layout shift).
-- Previous results stay on screen while the next page loads.
-- Compound MongoDB indexes for both wishlist queries.
-- Only the fields the UI needs are sent to the client.
+* API key protection
+* Centralized error handling
+* Response normalization
+* Caching
+* Rate-limit handling
+* Easier replacement of the movie API in the future
 
-## 10. Assumptions
+---
 
-- Anonymous usage; no accounts.
-- TMDB is reachable and the key is valid.
-- MongoDB runs locally or via Atlas.
-- Genre/year filtering uses TMDB `discover`, which (like TMDB itself) does not
-  support combining a text query with filters — so filters apply to discovery
-  browsing and the search page filters the active result set by year/genre.
+## 2. MongoDB for wishlist persistence
 
-## 11. Known limitations
+MongoDB was selected because the application already uses a Node/Express stack and movie wishlist data is well suited to a document database.
 
-- Wishlist is per-browser and lost if localStorage is cleared.
-- In-memory cache is not shared across server instances.
-- Rate limiting is per-process and in-memory.
-- Snapshot data can drift from TMDB over time.
-- No automated test suite.
+Wishlist data is stored on the server so that it can survive:
 
-## 12. AI usage
+* Page refreshes
+* Browser restarts
+* Navigation between pages
 
-AI assistance was used to scaffold boilerplate (Express wiring, Tailwind setup,
-README structure) and to review error handling. All architecture decisions,
-data modelling, and the TMDB integration approach were reviewed and adjusted by
-hand; every file is written to be readable and explainable.
+---
 
-## 13. Future improvements
+## 3. Server-side caching
 
-- Real accounts (JWT) so wishlists follow the user across devices.
-- Redis cache + shared rate limiting.
-- Infinite scroll as an alternative to pagination.
-- Movie trailers, cast, and recommendations on the details page.
-- Unit tests (Jest/Supertest) and Playwright end-to-end tests.
-- Docker Compose for one-command local setup.
+Repeated TMDB requests are cached on the backend.
+
+For example, if multiple users request the same popular movies page within a short period, the server can reuse the cached response instead of repeatedly requesting TMDB.
+
+This helps reduce:
+
+* External API requests
+* Response time
+* TMDB API usage
+
+---
+
+## 4. Response normalization
+
+TMDB responses are converted into a consistent structure before being returned to the frontend.
+
+This keeps the React components independent of the exact structure of the external API.
+
+If the external API response changes, the movie service can be updated without requiring major frontend changes.
+
+---
+
+## 5. Error handling
+
+The backend handles different external API failures separately, including:
+
+* Invalid API key
+* Movie not found
+* TMDB rate limits
+* Request timeout
+* TMDB server errors
+* Network failures
+
+The frontend then displays appropriate loading, error, or empty states.
+
+---
+
+## 6. Pagination
+
+Movie lists use pagination rather than loading an unlimited number of movies at once.
+
+This helps keep the application responsive when working with large movie collections.
+
+---
+
+## 7. Anonymous wishlist identification
+
+The application supports wishlist functionality without requiring users to create an account.
+
+An anonymous user identifier is used to associate wishlist items with the browser/user session.
+
+This allows wishlist data to remain persistent without implementing a complete authentication system.
+
+---
+
+# 📌 Assumptions Made
+
+* TMDB is available as the external movie data provider.
+* Users can browse movies without creating an account.
+* An anonymous user identifier is sufficient for wishlist functionality for this assignment.
+* TMDB provides the required movie metadata such as title, poster, overview, rating, release date, and genres.
+* TMDB may occasionally be unavailable or rate-limit requests, so the application should provide graceful error feedback.
+* The application is primarily intended for modern desktop and mobile browsers.
+* Movie availability and metadata depend on the TMDB API.
+
+---
+
+# ⚠️ Known Limitations
+
+* The wishlist is anonymous and is not connected to a permanent user account.
+* Clearing browser storage or changing the anonymous identifier can cause the user to lose access to their previous wishlist.
+* TMDB availability and rate limits can affect movie data loading.
+* Server-side caching is currently simple and in-memory, so cached data is lost whenever the backend server restarts.
+* The application does not currently include user authentication.
+* The application does not provide streaming links or information about where movies can legally be watched.
+* Search and movie information depend on the quality and completeness of TMDB data.
+* There is currently no large-scale distributed caching layer.
+
+---
+
+# 🤖 AI Tools Used
+
+AI tools were used during development as a development assistant rather than as a replacement for understanding the implementation.
+
+### Lovable
+
+Lovable was used initially to:
+
+* Explore the application architecture
+* Generate the initial frontend structure
+* Create UI components and layouts
+* Generate initial boilerplate
+* Explore implementation ideas
+
+The generated project was then reviewed and modified to fit the required architecture and technology stack.
+
+### ChatGPT
+
+ChatGPT was used for:
+
+* Architecture planning
+* Breaking the assignment into smaller implementation steps
+* Debugging
+* Understanding errors
+* Reviewing API integration
+* Improving README/documentation
+* Generating and reviewing boilerplate code
+* Discussing technical decisions and edge cases
+
+### Cursor / VS Code
+
+Cursor/VS Code was used to continue development and modify the generated code after the initial AI-generated implementation.
+
+All generated code was reviewed and adapted as needed, and the implementation decisions were made with an understanding of how the application works.
+
+---
+
+# 🔐 Security Considerations
+
+* TMDB API credentials are stored only on the backend.
+* Environment variables are used for sensitive configuration.
+* `.env` files are excluded from Git.
+* Frontend requests go through the backend instead of exposing the TMDB API key.
+* API inputs are validated before processing.
+* External API errors are handled centrally.
+* Rate limiting is considered to prevent excessive requests.
+
+---
+
+# 📱 Responsive Design
+
+The UI is designed to work across different screen sizes.
+
+The application accounts for:
+
+* Desktop screens
+* Tablets
+* Mobile devices
+* Different poster dimensions
+* Long movie titles
+* Large movie result sets
+* Empty results
+* Slow network conditions
+* API failures
+
+---
+
+# 🧪 Error & Loading States
+
+The application provides feedback for different states:
+
+### Loading
+
+Displays loading indicators while movie data is being fetched.
+
+### Empty
+
+Displays an appropriate message when no movies match the current search/filter.
+
+### Error
+
+Displays an error message when the backend or TMDB cannot be reached.
+
+### Slow/Unavailable API
+
+The backend handles TMDB timeout and network errors and returns an appropriate response to the frontend.
+
+---
+
+# 🚧 What I Would Improve With Additional Time
+
+If more development time were available, I would improve the application in the following areas:
+
+### 1. Authentication
+
+Add user authentication so wishlist data can be permanently associated with an account and accessed across different devices.
+
+### 2. Better caching
+
+Replace the current in-memory cache with Redis for production-scale caching.
+
+### 3. Automated testing
+
+Add:
+
+* Unit tests
+* API integration tests
+* Component tests
+* End-to-end tests
+
+### 4. Better search experience
+
+Improve search with:
+
+* Search suggestions
+* More advanced filters
+* Better debouncing
+* Search history
+* More detailed sorting options
+
+### 5. Performance improvements
+
+Further optimize:
+
+* Image loading
+* API requests
+* Pagination
+* Component rendering
+* Caching
+
+### 6. Improved accessibility
+
+Add more comprehensive keyboard navigation, screen-reader support, semantic HTML, and accessibility testing.
+
+### 7. Production deployment
+
+Deploy the frontend and backend using production infrastructure and configure:
+
+* HTTPS
+* Production environment variables
+* Production database
+* Distributed caching
+* Monitoring and logging
+
+---
+
+# 📄 License
+
+This project was created as a technical assignment and learning project.
+
+Movie information and images are provided by **TMDB**.
+
+---
+
+# 👨‍💻 Author
+
+**Pranav Phalke**
+
+Full-Stack / MERN Developer
+
+Technologies: React.js, Node.js, Express.js, MongoDB, JavaScript, Tailwind CSS
